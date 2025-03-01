@@ -56,6 +56,12 @@
     <button onclick="downloadAll()">Download Semua (ZIP)</button>
     <div id="qrContainer" class="qr-container"></div>
     <script>
+        function formatTime(seconds) {
+            let minutes = Math.floor(seconds / 60);
+            let secs = Math.round(seconds % 60);
+            return `${minutes} menit ${secs} detik`;
+        }
+
         function generateQR() {
             let inputText = document.getElementById("textInput").value.trim();
             let lines = inputText.split("\n").filter(line => line.trim() !== "");
@@ -67,9 +73,10 @@
                 return;
             }
 
+            let estimatedTime = formatTime(lines.length * 0.5);
             Swal.fire({
                 title: 'Sedang Memproses...',
-                text: 'Harap tunggu, QR Code sedang dibuat.',
+                text: `Harap tunggu, QR Code sedang dibuat. Estimasi waktu: ${estimatedTime}`,
                 allowOutsideClick: false,
                 didOpen: () => {
                     Swal.showLoading();
@@ -77,7 +84,8 @@
             });
 
             let zip = new JSZip();
-            let promises = lines.map((text, index) => {
+            let promises = lines.map((text) => {
+                let cleanText = text.replace(/[^a-zA-Z0-9]/g, "_");
                 let qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(text)}`;
                 let div = document.createElement("div");
                 div.classList.add("qr-box");
@@ -85,7 +93,7 @@
                     <p>${text}</p>
                     <img src="${qrUrl}" alt="QR Code">
                     <br>
-                    <a href="${qrUrl}" download="qr_${index + 1}.png">
+                    <a href="${qrUrl}" download="${cleanText}.png">
                         <button>Download</button>
                     </a>
                 `;
@@ -94,7 +102,7 @@
                 return fetch(qrUrl)
                     .then(res => res.blob())
                     .then(blob => {
-                        zip.file(`qr_${index + 1}.png`, blob);
+                        zip.file(`${cleanText}.png`, blob);
                     });
             });
             
@@ -113,20 +121,22 @@
                 return;
             }
 
+            let estimatedTime = formatTime(images.length * 0.3);
             Swal.fire({
                 title: 'Mengunduh...',
-                text: 'QR Code sedang dikemas dalam ZIP.',
+                text: `QR Code sedang dikemas dalam ZIP. Estimasi waktu: ${estimatedTime}`,
                 allowOutsideClick: false,
                 didOpen: () => {
                     Swal.showLoading();
                 }
             });
             
-            let promises = Array.from(images).map((img, index) => 
-                fetch(img.src)
+            let promises = Array.from(images).map((img) => {
+                let filename = img.previousElementSibling.textContent.replace(/[^a-zA-Z0-9]/g, "_");
+                return fetch(img.src)
                     .then(res => res.blob())
-                    .then(blob => zip.file(`qr_${index + 1}.png`, blob))
-            );
+                    .then(blob => zip.file(`${filename}.png`, blob));
+            });
             
             Promise.all(promises).then(() => {
                 zip.generateAsync({ type: "blob" }).then(content => {
