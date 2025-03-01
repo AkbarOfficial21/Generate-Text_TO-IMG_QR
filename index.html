@@ -147,6 +147,28 @@
                     document.body.removeChild(link);
                 });
         }
+
+        async function downloadAll() {
+            let zip = new JSZip();
+            let images = document.querySelectorAll(".qr-box img");
+            if (images.length === 0) {
+                Swal.fire("Oops!", "Tidak ada QR Code untuk diunduh!", "warning");
+                return;
+            }
+            Swal.fire({ title: 'Mengunduh ZIP...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            let promises = Array.from(images).map(async (img, index) => {
+                let response = await fetch(img.src);
+                let blob = await response.blob();
+                let filename = img.previousElementSibling.innerText.replace(/[^a-zA-Z0-9]/g, "_");
+                zip.file(`${filename}.png`, blob);
+            });
+            await Promise.all(promises);
+            zip.generateAsync({ type: "blob" }).then(content => {
+                saveAs(content, "QR_Codes.zip");
+                Swal.close();
+                Swal.fire("Selesai!", "ZIP berhasil diunduh!", "success");
+            });
+        }
     </script>
 </body>
 </html>
