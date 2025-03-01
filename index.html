@@ -46,6 +46,27 @@
             border-radius: 10px;
             box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
         }
+        .progress-bar {
+            width: 100%;
+            background-color: #ddd;
+            border-radius: 5px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        .progress {
+            height: 20px;
+            width: 0%;
+            border-radius: 5px;
+            transition: width 0.2s;
+            background: linear-gradient(90deg, red, orange, yellow, green, blue, indigo, violet);
+            background-size: 400% 400%;
+            animation: rainbow 2s linear infinite;
+        }
+        @keyframes rainbow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
     </style>
 </head>
 <body>
@@ -56,13 +77,7 @@
     <button onclick="downloadAll()">Download Semua (ZIP)</button>
     <div id="qrContainer" class="qr-container"></div>
     <script>
-        function formatTime(seconds) {
-            let minutes = Math.floor(seconds / 60);
-            let secs = Math.round(seconds % 60);
-            return `${minutes} menit ${secs} detik`;
-        }
-
-        function generateQR() {
+        async function generateQR() {
             let inputText = document.getElementById("textInput").value.trim();
             let lines = inputText.split("\n").filter(line => line.trim() !== "");
             let container = document.getElementById("qrContainer");
@@ -73,78 +88,64 @@
                 return;
             }
 
-            let estimatedTime = formatTime(lines.length * 0.5);
             Swal.fire({
                 title: 'Sedang Memproses...',
-                text: `Harap tunggu, QR Code sedang dibuat. Estimasi waktu: ${estimatedTime}`,
+                html: `<div class='progress-bar'><div class='progress' style='width:0%'></div></div>`,
                 allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
+                didOpen: () => Swal.showLoading()
             });
 
             let zip = new JSZip();
-            let promises = lines.map((text) => {
+            let startTime = Date.now();
+            let total = lines.length;
+            let completed = 0;
+
+            let promises = lines.map(async (text) => {
                 let cleanText = text.replace(/[^a-zA-Z0-9]/g, "_");
                 let qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(text)}`;
+                let img = new Image();
+                img.src = qrUrl;
+                
                 let div = document.createElement("div");
                 div.classList.add("qr-box");
                 div.innerHTML = `
                     <p>${text}</p>
                     <img src="${qrUrl}" alt="QR Code">
                     <br>
-                    <a href="${qrUrl}" download="${cleanText}.png">
-                        <button>Download</button>
-                    </a>
+                    <button onclick="downloadSingle('${qrUrl}', '${cleanText}')">Download</button>
                 `;
                 container.appendChild(div);
                 
-                return fetch(qrUrl)
-                    .then(res => res.blob())
-                    .then(blob => {
-                        zip.file(`${cleanText}.png`, blob);
-                    });
-            });
-            
-            Promise.all(promises).then(() => {
-                Swal.close();
-                Swal.fire("Selesai!", "QR Code berhasil dibuat!", "success");
-            });
-        }
-
-        function downloadAll() {
-            let zip = new JSZip();
-            let images = document.querySelectorAll("#qrContainer img");
-
-            if (images.length === 0) {
-                Swal.fire("Oops!", "Generate QR terlebih dahulu!", "warning");
-                return;
-            }
-
-            let estimatedTime = formatTime(images.length * 0.3);
-            Swal.fire({
-                title: 'Mengunduh...',
-                text: `QR Code sedang dikemas dalam ZIP. Estimasi waktu: ${estimatedTime}`,
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
-            });
-            
-            let promises = Array.from(images).map((img) => {
-                let filename = img.previousElementSibling.textContent.replace(/[^a-zA-Z0-9]/g, "_");
-                return fetch(img.src)
-                    .then(res => res.blob())
-                    .then(blob => zip.file(`${filename}.png`, blob));
-            });
-            
-            Promise.all(promises).then(() => {
-                zip.generateAsync({ type: "blob" }).then(content => {
-                    saveAs(content, "QR_Codes.zip");
-                    Swal.close();
-                    Swal.fire("Selesai!", "QR Code berhasil diunduh dalam ZIP!", "success");
+                let response = await fetch(qrUrl);
+                let blob = await response.blob();
+                zip.file(`${cleanText}.png`, blob);
+                completed++;
+                let progress = Math.round((completed / total) * 100);
+                let elapsedTime = (Date.now() - startTime) / 1000;
+                let remainingTime = ((elapsedTime / completed) * (total - completed)).toFixed(0);
+                let minutes = Math.floor(remainingTime / 60);
+                let seconds = remainingTime % 60;
+                Swal.update({
+                    html: `Progress: <b>${progress}%</b><br>Sisa Waktu: <b>${minutes}m ${seconds}s</b><br><div class='progress-bar'><div class='progress' style='width:${progress}%'></div></div>`
                 });
             });
+            
+            await Promise.all(promises);
+            Swal.close();
+            Swal.fire("Selesai!", "QR Code berhasil dibuat!", "success");
+        }
+
+        function downloadSingle(url, filename) {
+            fetch(url)
+                .then(response => response.blob())
+                .then(blob => {
+                    let link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = filename + '.png';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                });
         }
     </script>
 </body>
