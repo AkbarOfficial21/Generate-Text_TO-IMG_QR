@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #F8E8EE;
+            color: #5D3E6A;
+        }
+        textarea {
+            width: 80%;
+            height: 100px;
+            border: 2px solid #C29FD4;
+            border-radius: 8px;
+            padding: 10px;
+        }
+        button {
+            background-color: #A779C9;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #8F5BA3;
+        }
+        .qr-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .qr-box {
+            background: white;
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <h2>Masukkan Teks (Satu per Baris)</h2>
+    <textarea id="textInput" placeholder="Masukkan teks..."></textarea>
+    <br>
+    <button onclick="generateQR()">Generate QR</button>
+    <button onclick="downloadAll()">Download Semua (ZIP)</button>
+    <div id="qrContainer" class="qr-container"></div>
+    <script>
+        function generateQR() {
+            let inputText = document.getElementById("textInput").value.trim();
+            let lines = inputText.split("\n").filter(line => line.trim() !== "");
+            let container = document.getElementById("qrContainer");
+            container.innerHTML = "";
+
+            if (lines.length === 0) {
+                Swal.fire("Oops!", "Masukkan setidaknya satu teks!", "warning");
+                return;
+            }
+
+            Swal.fire({
+                title: 'Sedang Memproses...',
+                text: 'Harap tunggu, QR Code sedang dibuat.',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            let zip = new JSZip();
+            let promises = lines.map((text, index) => {
+                let qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(text)}`;
+                let div = document.createElement("div");
+                div.classList.add("qr-box");
+                div.innerHTML = `
+                    <p>${text}</p>
+                    <img src="${qrUrl}" alt="QR Code">
+                    <br>
+                    <a href="${qrUrl}" download="qr_${index + 1}.png">
+                        <button>Download</button>
+                    </a>
+                `;
+                container.appendChild(div);
+                
+                return fetch(qrUrl)
+                    .then(res => res.blob())
+                    .then(blob => {
+                        zip.file(`qr_${index + 1}.png`, blob);
+                    });
+            });
+            
+            Promise.all(promises).then(() => {
+                Swal.close();
+                Swal.fire("Selesai!", "QR Code berhasil dibuat!", "success");
+            });
+        }
+
+        function downloadAll() {
+            let zip = new JSZip();
+            let images = document.querySelectorAll("#qrContainer img");
+
+            if (images.length === 0) {
+                Swal.fire("Oops!", "Generate QR terlebih dahulu!", "warning");
+                return;
+            }
+
+            Swal.fire({
+                title: 'Mengunduh...',
+                text: 'QR Code sedang dikemas dalam ZIP.',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            
+            let promises = Array.from(images).map((img, index) => 
+                fetch(img.src)
+                    .then(res => res.blob())
+                    .then(blob => zip.file(`qr_${index + 1}.png`, blob))
+            );
+            
+            Promise.all(promises).then(() => {
+                zip.generateAsync({ type: "blob" }).then(content => {
+                    saveAs(content, "QR_Codes.zip");
+                    Swal.close();
+                    Swal.fire("Selesai!", "QR Code berhasil diunduh dalam ZIP!", "success");
+                });
+            });
+        }
+    </script>
+</body>
+</html>
